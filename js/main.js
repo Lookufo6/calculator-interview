@@ -1165,3 +1165,79 @@ absButton.className = 'key key--action';
 absButton.textContent = '|x|';
 absButton.addEventListener('click', inputAbs);
 keyboard.appendChild(absButton);
+
+// =========================================
+// 新增：排列组合键 nPr / nCr
+// 排列数 A(n,k) = n!/(n−k)!，组合数 C(n,k) = n!/(k!(n−k)!)。
+// 做成与 + − × ÷ 同构的二元运算符：输入 n → 按 nPr / nCr → 输入 k → 按 =。
+// 复用既有 OPERATORS + applyPending 状态机，因此副屏表达式、C / CE、括号、
+// 连按 = 这些既有行为都自动生效，不另起一套状态。
+// 大阶乘一律用连乘 / 乘一项除一项的算法，不直接算 n!，避免 21! 以上溢出。
+// 本段为纯叠加新增：未改动上方任何既有代码、显示区 DOM 结构与既有函数签名。
+// =========================================
+
+/** 排列组合的合法输入：n、k 均为非负整数，且 k ≤ n。 */
+function isValidArity(n, k) {
+  return Number.isInteger(n) && Number.isInteger(k) && n >= 0 && k >= 0 && k <= n;
+}
+
+/**
+ * 排列数 A(n,k) = n × (n−1) × … × (n−k+1)。
+ * 只做 k 次连乘，不做 n!/(n−k)!，因此中间值不会因大阶乘溢出。
+ * @param {number} n 元素总数
+ * @param {number} k 取出个数
+ * @returns {number} 排列数
+ */
+function permutationCount(n, k) {
+  let result = 1;
+  for (let i = 0; i < k; i += 1) {
+    result *= n - i;
+  }
+  return result;
+}
+
+/**
+ * 组合数 C(n,k)，按「先乘一项、再除一项」逐步收敛：
+ * 第 i 步 = 前一步 × (n−k+i) ÷ i，每一步的中间值都是整数，
+ * 既不会溢出，也不会像先算 n! 那样丢精度。
+ * @param {number} n 元素总数
+ * @param {number} k 取出个数
+ * @returns {number} 组合数
+ */
+function combinationCount(n, k) {
+  let result = 1;
+  for (let i = 1; i <= k; i += 1) {
+    result = (result * (n - k + i)) / i;
+  }
+  return result;
+}
+
+/**
+ * 结果收敛：只放行安全整数范围内的整数值，
+ * 溢出或超过 2^53 精度上限时返回 NaN，交给既有 formatResult 显示「错误」，
+ * 宁可不给结果，也不显示一串已经不准的数字。
+ */
+function toSafeCount(value) {
+  return Number.isSafeInteger(value) ? value : NaN;
+}
+
+// 注册进既有运算符表：与 xʸ / mod / ʸ√x 同类，都是加一行即可
+OPERATORS['nPr'] = (n, k) => (isValidArity(n, k) ? toSafeCount(permutationCount(n, k)) : NaN);
+OPERATORS['nCr'] = (n, k) => (isValidArity(n, k) ? toSafeCount(combinationCount(n, k)) : NaN);
+
+// 按键：沿用现有 .key .key--action 样式直接追加到键盘网格末尾（CT1：显示区之外可加按钮），
+// 不往 LAYOUT / KEY_CLASS 里加新 kind，避免动到既有按键分发逻辑
+const PERMUTATION_KEYS = [
+  ['nPr', 'nPr', '排列数 A(n,k) = n!/(n−k)!'],
+  ['nCr', 'nCr', '组合数 C(n,k) = n!/(k!(n−k)!)'],
+];
+
+PERMUTATION_KEYS.forEach(([label, op, hint]) => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'key key--action';
+  button.textContent = label;
+  button.title = hint;
+  button.addEventListener('click', () => inputOperator(op));
+  keyboard.appendChild(button);
+});
